@@ -1,0 +1,162 @@
+#!/bin/sh -e
+
+_confdirname='.git-inv'
+
+_confpath="$_confdirname"
+_basepath='.'
+
+while [ ! -d "$_confpath" ]
+do
+    _confpath="../$_confpath"
+    _basepath="$( dirname "$_confpath" )"
+
+    if [ "$( cd "$_basepath" && pwd )" = '/' ]
+    then
+        break
+    fi
+done
+
+if [ ! -d "$_confpath" ]
+then
+    echo "Configuration directory \`$_confdirname' could not be found up to the root directory." >&2
+    exit 1
+fi
+
+_save()
+(
+    if [ -z "$1" ]
+    then
+        echo 'Please provide path to the repository.' >&2
+        exit 1
+    fi
+
+    _repoabspath="$( cd "$1" && pwd )"
+    _reporelpath="${_repoabspath#"$( pwd )/"}"
+
+    if [ ! -d "$_reporelpath/.git" ]
+    then
+        echo "Directory \`$_reporelpath' is not repository." >&2
+        exit 1
+    fi
+
+    _repobasepath="${_repoabspath#"$( cd "$_basepath" && pwd )/"}"
+    _repoconffile="$_confpath/$_repobasepath"
+
+    if [ -f "$_repoconffile" ]
+    then
+        echo "Repository \`$_reporelpath' is already saved." >&2
+        exit 1
+    fi
+
+    _repoconffiledir="$( dirname "$_repoconffile" )"
+    _repourl="$( git -C "$_reporelpath" remote get-url origin )"
+
+    mkdir -p "$_repoconffiledir"
+    echo "$_repourl" > "$_repoconffile"
+    echo "Repository \`$_reporelpath' saved." >&2
+)
+
+_get()
+(
+    find "$_confpath" -type f -printf '%P\n' | while read -r _repoabspath
+    do
+        _reporealpath="$( cd "$_basepath" && pwd )/$_repoabspath"
+        _reporelpath="${_reporealpath#"$( pwd )/"}"
+
+        if [ "$_reporealpath" = "$_reporelpath" ]
+        then
+            continue
+        fi
+
+        echo "$_reporelpath"
+    done \
+        | sort
+)
+
+_list()
+(
+    _get | while read -r _reporelpath
+    do
+        if [ ! -d "$_reporelpath" ]
+        then
+            continue
+        fi
+
+        echo "$_reporelpath"
+    done
+)
+
+_lost()
+(
+    _get | while read -r _reporelpath
+    do
+        if [ -d "$_reporelpath" ]
+        then
+            continue
+        fi
+
+        echo "$_reporelpath"
+    done
+)
+
+_clone()
+(
+    while read -r _reporelpath
+    do
+        _reporealpath="$( pwd )/$_reporelpath"
+        _repoabspath="${_reporealpath#"$( cd "$_basepath" && pwd )/"}"
+        _repoconffile="$( cd "$_confpath" && pwd )/$_repoabspath"
+        echo "$_reporelpath" | _exec git clone "$( cat "$_repoconffile" )" "$_reporelpath"
+    done
+)
+
+_exec()
+(
+    while read -r _reporelpath
+    do
+        printf "\033[0;7m%s\033[0m\n" "$_reporelpath" >&2
+
+        if [ "$1" = 'git' ]
+        then
+            "$@" || true
+        else
+            git -C "$_reporelpath" "$@" || true
+        fi
+    done
+)
+
+_info()
+(
+    _list | while read -r _reporelpath
+    do
+        _branch="$( git -C "$_reporelpath" branch --show-current )"
+
+        if [ -z "$_branch" ]
+        then
+            if ! _branch="$( git -C "$_reporelpath" describe --tags 2>/dev/null )"
+            then
+                _branch='?'
+            fi
+        fi
+
+        _last="$( git -C "$_reporelpath" log -1 --pretty='%ar' )"
+
+        echo "$_reporelpath;$_branch;$_last"
+    done \
+        | column -t -s ';'
+)
+
+if [ -n "$1" ]
+then
+    _func="_$1"
+
+    if type "$_func" > /dev/null
+    then
+        shift
+        "$_func" "$@"
+    else
+        _list | _exec "$@"
+    fi
+else
+    _info
+fi
