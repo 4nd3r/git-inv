@@ -11,6 +11,8 @@ them to be either too complex or they didn't save URLs in their configuration.
 
 ## The Solution
 
+Drop `git-inv` to the `$PATH` and...
+
 ```
 $ cd ~
 $ mkdir .git-inv
