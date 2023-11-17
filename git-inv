@@ -101,7 +101,7 @@ _lost()
 
 _clone()
 (
-    while read -r _reporelpath
+    echo "${1:-"$( cat )"}" | while read -r _reporelpath
     do
         _reporealpath="$( pwd )/$_reporelpath"
         _repoabspath="${_reporealpath#"$( cd "$_basepath" && pwd )/"}"
