@@ -68,14 +68,17 @@ _get()
             continue
         fi
 
-        echo "$_reporelpath"
+        _repobasepath="${_repoabspath#"$( cd "$_basepath" && pwd )/"}"
+        _repoconffile="$_confpath/$_repobasepath"
+
+        echo "$_reporelpath;$( cat "$_repoconffile" )"
     done \
         | sort
 )
 
 _list()
 (
-    _get | while read -r _reporelpath
+    _get | cut -d ';' -f 1 | while read -r _reporelpath
     do
         if [ ! -d "$_reporelpath" ]
         then
@@ -88,7 +91,7 @@ _list()
 
 _lost()
 (
-    _get | while read -r _reporelpath
+    _get | cut -d ';' -f 1 | while read -r _reporelpath
     do
         if [ -d "$_reporelpath" ]
         then
@@ -142,6 +145,28 @@ _info()
         _last="$( git -C "$_reporelpath" log -1 --pretty='%ar' )"
 
         echo "$_reporelpath;$_branch;$_last"
+    done \
+        | column -t -s ';'
+)
+
+_check()
+(
+    _get | while read -r _repo
+    do
+        _reporelpath="$( echo "$_repo" | cut -d ';' -f 1 )"
+
+        if [ ! -d "$_reporelpath" ]
+        then
+            continue
+        fi
+
+        _repourl_should="$( echo "$_repo" | cut -d ';' -f 2 )"
+        _repourl_is="$( git -C "$_reporelpath" remote get-url origin )"
+
+        if [ "$_repourl_should" != "$_repourl_is" ]
+        then
+            echo "Repository \`$_reporelpath' has origin URL mismatch." >&2
+        fi
     done \
         | column -t -s ';'
 )
